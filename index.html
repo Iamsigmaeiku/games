@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>周末夢時代 互動遊戲站</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: 1.5rem 1.2rem;
+      gap: 1.6rem;
+      background: linear-gradient(160deg, #e8f0fe 0%, #f0f4f9 50%, #fef3e8 100%);
+    }
+
+    .hero {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .logo {
+      font-size: clamp(2rem, 7.5vw, 3.6rem);
+      font-weight: 900;
+      color: var(--text);
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+    .logo span {
+      background: linear-gradient(135deg, var(--blue) 0%, #7c3aed 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .sub {
+      font-size: clamp(0.88rem, 2.8vw, 1.1rem);
+      color: var(--dim);
+    }
+
+    .game-grid {
+      display: grid;
+      gap: 0.85rem;
+      width: 100%;
+      max-width: 460px;
+    }
+
+    .game-card {
+      display: flex;
+      align-items: center;
+      gap: 1.1rem;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 1.2rem;
+      padding: 1.25rem 1.4rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.14s, box-shadow 0.14s, border-color 0.14s;
+      box-shadow: var(--shadow-sm);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .game-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+    .game-card:active { transform: scale(0.98); }
+
+    .game-card.rps:hover  { border-color: var(--green); }
+    .game-card.s67:hover  { border-color: var(--blue); }
+
+    .card-icon-wrap {
+      width: clamp(52px, 12vw, 64px);
+      height: clamp(52px, 12vw, 64px);
+      border-radius: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(1.8rem, 5vw, 2.4rem);
+      flex-shrink: 0;
+    }
+    .game-card.rps .card-icon-wrap { background: rgba(5,150,105,0.1); }
+    .game-card.s67 .card-icon-wrap { background: rgba(37,99,235,0.1); }
+
+    .card-text h2 {
+      font-size: clamp(1rem, 3.5vw, 1.25rem);
+      color: var(--text);
+      margin: 0 0 0.3rem;
+      font-weight: 700;
+    }
+    .card-text p {
+      font-size: clamp(0.72rem, 2.2vw, 0.88rem);
+      color: var(--dim);
+      margin: 0;
+      line-height: 1.45;
+    }
+
+    .card-arrow {
+      margin-left: auto;
+      color: var(--border);
+      font-size: 1.2rem;
+      flex-shrink: 0;
+      transition: color 0.14s, transform 0.14s;
+    }
+    .game-card:hover .card-arrow {
+      color: var(--dim);
+      transform: translateX(3px);
+    }
+
+    .footer {
+      font-size: 0.72rem;
+      color: var(--dim);
+      text-align: center;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="logo"><span>周末夢時代</span><br>互動遊戲站</div>
+    <div class="sub">選擇你的挑戰 👇</div>
+  </div>
+
+  <div class="game-grid">
+    <a class="game-card rps" href="rps.html">
+      <div class="card-icon-wrap">✊</div>
+      <div class="card-text">
+        <h2>剪刀石頭布 AI 對戰</h2>
+        <p>比出手勢，挑戰 AI！偵測到手勢後倒數 3 秒決勝負</p>
+      </div>
+      <div class="card-arrow">›</div>
+    </a>
+    <a class="game-card s67" href="speed67.html">
+      <div class="card-icon-wrap">6️⃣7️⃣</div>
+      <div class="card-text">
+        <h2>67 Speed 手臂速度挑戰</h2>
+        <p>20 秒內瘋狂甩手臂，登上排行榜！</p>
+      </div>
+      <div class="card-arrow">›</div>
+    </a>
+  </div>
+
+  <div class="footer">Powered by MediaPipe · 瀏覽器端即時辨識</div>
+</body>
+</html>

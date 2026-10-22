@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>67 Speed Challenge</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .conf-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.65rem;
+      border-radius: 99px;
+      font-size: clamp(0.72rem, 2vw, 0.85rem);
+      font-weight: 700;
+      transition: background 0.2s, color 0.2s;
+    }
+    .conf-badge.good   { background: rgba(5,150,105,0.14); color: var(--green); }
+    .conf-badge.medium { background: rgba(217,119,6,0.14);  color: var(--yellow); }
+    .conf-badge.bad    { background: rgba(100,116,139,0.12); color: var(--dim); }
+
+    #skeleton-layer { position:absolute; inset:0; z-index:12; pointer-events:none; }
+  </style>
+</head>
+<body class="game-page">
+
+  <nav class="top-nav">
+    <a href="./" class="btn btn-back">← 返回</a>
+    <h1>6️⃣7️⃣ Speed Challenge</h1>
+    <div style="display:flex; align-items:center; gap:0.5rem;">
+      <span id="conf-badge" class="conf-badge bad">偵測中…</span>
+      <span style="font-size:clamp(0.78rem,2.3vw,0.95rem); color:var(--yellow);">
+        🏆 <span id="best-score">--</span>
+      </span>
+    </div>
+  </nav>
+
+  <div class="game-body">
+
+  <div class="camera-wrapper">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <canvas id="skeleton-layer"></canvas>
+
+    <div id="cd-overlay" style="
+      display:none; position:absolute; inset:0; z-index:25;
+      align-items:center; justify-content:center;
+      background:rgba(17,24,39,0.5);
+    ">
+      <div id="cd-num" style="font-size:clamp(6rem,20vw,10rem); font-weight:900; color:#fff; line-height:1;"></div>
+    </div>
+
+    <div class="cam-permission" id="cam-perm">
+      <div id="perm-initial">
+        <div class="icon">📷</div>
+        <h3>需要鏡頭權限</h3>
+        <p>遊戲需要偵測你的手臂動作</p>
+        <button class="btn btn-primary" style="margin-top:0.3rem;" onclick="startCamera()">開啟鏡頭</button>
+      </div>
+      <div id="perm-loading" style="display:none; flex-direction:column; align-items:center; gap:0.8rem;">
+        <div class="spinner"></div>
+        <p style="color:#94a3b8; font-size:0.9rem;">載入 AI 模型中…</p>
+        <p style="color:#64748b; font-size:0.75rem;">瀏覽器端 MediaPipe Pose 即時辨識</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="game-panel">
+
+    <div id="state-idle" style="display:flex; flex-direction:column; gap:0.7rem;">
+      <div class="status-text" style="color:var(--yellow);">準備好了嗎？</div>
+      <div class="status-sub">
+        20 秒內甩動手臂越快越好！<br>
+        請站到鏡頭前，讓系統看到你的上半身
+      </div>
+      <button class="btn btn-primary" id="start-btn" onclick="startGame()" disabled>
+        🔥 開始挑戰
+      </button>
+      <div style="margin-top:0.4rem;">
+        <div style="font-size:0.88rem; color:var(--yellow); font-weight:700; margin-bottom:0.4rem;">
+          🏆 排行榜 TOP 5
+        </div>
+        <ul class="leaderboard" id="leaderboard-list">
+          <li class="lb-row" style="color:var(--dim);">載入中…</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="state-playing" style="display:none; flex-direction:column; gap:0.6rem;">
+      <div class="status-sub">甩動次數</div>
+      <div class="score-big" id="swing-count">0</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="time-bar" style="width:100%;"></div>
+      </div>
+      <div class="status-sub" id="time-left-txt">20.0 秒</div>
+      <div class="status-text" id="encourage-txt"
+        style="font-size:clamp(1rem,3vw,1.4rem); min-height:1.6em;">SIX SEVEN！</div>
+    </div>
+
+    <div id="state-result" style="display:none; flex-direction:column; gap:0.75rem; align-items:stretch;">
+      <div class="status-text" style="color:var(--dim);">最終成績</div>
+      <div class="score-big" id="final-score">0</div>
+      <div class="status-sub">次擺動</div>
+      <div id="new-record-badge"
+        style="display:none; color:var(--green); font-size:1.15rem; font-weight:700; text-align:center;">
+        🏆 新紀錄！恭喜！
+      </div>
+      <input id="name-input" type="text" maxlength="10" placeholder="輸入你的名字（可選）"
+        style="padding:0.65rem; border-radius:0.6rem; border:1px solid var(--border);
+               background:var(--surface); color:var(--text); font-size:1rem;
+               width:100%; text-align:center;">
+      <button class="btn btn-primary" onclick="submitScore()">💾 送出成績</button>
+      <button class="btn btn-danger"  onclick="startGame()">🔥 再挑戰</button>
+    </div>
+
+  </div>
+
+  </div><!-- /.game-body -->
+
+  <script type="module">
+    import { PoseLandmarker, FilesetResolver }
+      from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs";
+
+    // ── 常數（對齊 challenge67.py）──────────────────────────────────────
+    const GAME_DURATION        = 20000;
+    const COUNTDOWN_S          = 3;
+    const SWING_THRESHOLD      = 0.04;   // 與 Python 版一致
+    const CONFIDENCE_THRESHOLD = 0.60;   // wrist visibility 門檻
+
+    // 上半身骨架連線 [左肩→左肘, 左肘→左腕, 右肩→右肘, 右肘→右腕]
+    // 索引對應 KEY_IDS = [0鼻, 1左肩, 2右肩, 3左肘, 4右肘, 5左腕, 6右腕]
+    const ARM_CONNECTIONS = [[1,3],[3,5],[2,4],[4,6]];
+    const KEY_IDS         = [0, 11, 12, 13, 14, 15, 16];
+
+    // ── Swing 計數器（對齊 challenge67.py ArmSwingCounter）──────────────
+    const swingCounter = {
+      prevY: { L: null, R: null },
+      dir:   { L: null, R: null },
+      count: 0,
+
+      update(Ly, Ry, confidence) {
+        if (confidence < CONFIDENCE_THRESHOLD) return;
+        for (const [side, currY] of [['L', Ly], ['R', Ry]]) {
+          if (currY === null) continue;
+          const prev = this.prevY[side];
+          if (prev === null) { this.prevY[side] = currY; continue; }
+          const diff = currY - prev;
+          if (Math.abs(diff) < SWING_THRESHOLD) continue;
+          const newDir = diff > 0 ? 'D' : 'U';
+          if (this.dir[side] !== null && newDir !== this.dir[side]) this.count++;
+          this.dir[side]   = newDir;
+          this.prevY[side] = currY;
+        }
+      },
+
+      reset() {
+        this.prevY = { L: null, R: null };
+        this.dir   = { L: null, R: null };
+        this.count = 0;
+      }
+    };
+
+    // ── DOM 參照 ─────────────────────────────────────────────────────────
+    const video     = document.getElementById('video');
+    const skelLayer = document.getElementById('skeleton-layer');
+    const skelCtx   = skelLayer.getContext('2d');
+    const cdOverlay = document.getElementById('cd-overlay');
+    const cdNum     = document.getElementById('cd-num');
+    const confBadge = document.getElementById('conf-badge');
+    const startBtn  = document.getElementById('start-btn');
+
+    // ── 狀態 ─────────────────────────────────────────────────────────────
+    let gameState = 'cam-perm';
+    let gameStart = null, cdStart = null, lastScore = 0;
+
+    // 姿勢偵測器
+    let poseLandmarker  = null;
+    let lastVideoTime   = -1;
+    let poseData        = { left_y: null, right_y: null, confidence: 0, landmarks: [] };
+
+    // ── 狀態切換 ─────────────────────────────────────────────────────────
+    function setGameState(s) {
+      gameState = s;
+      cdOverlay.style.display = s === 'countdown' ? 'flex' : 'none';
+      for (const id of ['idle', 'playing', 'result']) {
+        document.getElementById(`state-${id}`).style.display =
+          id === s ? 'flex' : 'none';
+      }
+    }
+
+    // ── 置信度 badge ──────────────────────────────────────────────────────
+    function updateConfBadge(conf) {
+      const pct = Math.round(conf * 100);
+      if (conf >= 0.6) {
+        confBadge.className   = 'conf-badge good';
+        confBadge.textContent = `✅ 偵測 ${pct}%`;
+      } else if (conf >= 0.3) {
+        confBadge.className   = 'conf-badge medium';
+        confBadge.textContent = `⚠️ 弱 ${pct}%`;
+      } else {
+        confBadge.className   = 'conf-badge bad';
+        confBadge.textContent = conf > 0 ? `❌ ${pct}%` : '偵測中…';
+      }
+    }
+
+    // ── 骨架繪製 ──────────────────────────────────────────────────────────
+    function resizeSkel() {
+      const w = video.videoWidth  || video.offsetWidth;
+      const h = video.videoHeight || video.offsetHeight;
+      if (skelLayer.width !== w || skelLayer.height !== h) {
+        skelLayer.width = w; skelLayer.height = h;
+      }
+    }
+
+    function drawSkeleton(lms) {
+      if (!lms || lms.length < 7) return;
+      skelCtx.save();
+      skelCtx.scale(-1, 1);
+      skelCtx.translate(-skelLayer.width, 0);
+
+      skelCtx.strokeStyle = 'rgba(52,211,153,0.7)';
+      skelCtx.lineWidth   = 3;
+      for (const [s, e] of ARM_CONNECTIONS) {
+        skelCtx.beginPath();
+        skelCtx.moveTo(lms[s][0] * skelLayer.width,  lms[s][1] * skelLayer.height);
+        skelCtx.lineTo(lms[e][0] * skelLayer.width,  lms[e][1] * skelLayer.height);
+        skelCtx.stroke();
+      }
+      for (const i of [5, 6]) {
+        skelCtx.beginPath();
+        skelCtx.arc(lms[i][0] * skelLayer.width, lms[i][1] * skelLayer.height,
+                    9, 0, Math.PI * 2);
+        skelCtx.fillStyle = '#fbbf24';
+        skelCtx.fill();
+      }
+      skelCtx.restore();
+    }
+
+    // ── 排行榜 ────────────────────────────────────────────────────────────
+    // 靜態網站沒有後端：排行榜存在這台裝置的瀏覽器 localStorage
+    const LB_KEY = 'speed67-leaderboard';
+    function readBoard() {
+      try { return JSON.parse(localStorage.getItem(LB_KEY)) || []; } catch (_) { return []; }
+    }
+    function escapeHtml(t) {
+      return String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function loadLeaderboard() {
+      try {
+        const board = readBoard();
+        const list  = document.getElementById('leaderboard-list');
+        if (!board.length) {
+          list.innerHTML = '<li class="lb-row" style="color:var(--dim);">還沒有紀錄，成為第一名！</li>';
+          return;
+        }
+        list.innerHTML = board.slice(0, 5).map((e, i) => `
+          <li class="lb-row">
+            <span class="lb-rank">#${i + 1}</span>
+            <span class="lb-name">${escapeHtml(e.name ?? '匿名')}</span>
+            <span class="lb-score">${e.score}</span>
+            <span class="lb-time">${e.time}</span>
+          </li>`).join('');
+        const best = board[0]?.score;
+        if (best) document.getElementById('best-score').textContent = best + ' 下';
+      } catch (_) {}
+    }
+
+    window.submitScore = async function () {
+      const name = document.getElementById('name-input').value.trim() || '匿名玩家';
+      try {
+        const d = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const time = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        const board = readBoard();
+        board.push({ name, score: lastScore, time });
+        board.sort((a, b) => b.score - a.score);
+        localStorage.setItem(LB_KEY, JSON.stringify(board.slice(0, 10)));
+        await loadLeaderboard();
+        setGameState('idle');
+      } catch (_) { alert('無法儲存成績（瀏覽器可能封鎖了儲存空間）'); }
+    };
+
+    window.startGame = function () {
+      swingCounter.reset();
+      cdStart = performance.now();
+      setGameState('countdown');
+    };
+
+    // ── MediaPipe PoseLandmarker 初始化 ───────────────────────────────────
+    async function initPose() {
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
+      );
+      const modelAssetPath =
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+      const options = {
+        runningMode:               "VIDEO",
+        numPoses:                  1,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence:  0.5,
+        minTrackingConfidence:      0.5,
+      };
+      try {
+        poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          ...options, baseOptions: { modelAssetPath, delegate: "GPU" },
+        });
+      } catch (_) {
+        poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          ...options, baseOptions: { modelAssetPath, delegate: "CPU" },
+        });
+      }
+    }
+
+    // ── 姿勢推論（每幀呼叫）─────────────────────────────────────────────
+    function detectPose() {
+      if (!poseLandmarker || !video.videoWidth) return;
+      const nowMs = performance.now();
+      if (video.currentTime === lastVideoTime) return;
+      lastVideoTime = video.currentTime;
+
+      const result = poseLandmarker.detectForVideo(video, nowMs);
+
+      if (!result.landmarks || result.landmarks.length === 0) {
+        poseData = { left_y: null, right_y: null, confidence: 0, landmarks: [] };
+        return;
+      }
+
+      const lm      = result.landmarks[0];
+      const lw      = lm[15]; // LEFT_WRIST
+      const rw      = lm[16]; // RIGHT_WRIST
+      const conf    = (lw.visibility + rw.visibility) / 2;
+      const left_y  = lw.visibility >= 0.3 ? lw.y : null;
+      const right_y = rw.visibility >= 0.3 ? rw.y : null;
+
+      // 提取上半身 7 點 [x, y] 供骨架繪製
+      const landmarks = KEY_IDS.map(i => [lm[i].x, lm[i].y]);
+
+      poseData = { left_y, right_y, confidence: conf, landmarks };
+    }
+
+    // ── 主迴圈 (rAF) ──────────────────────────────────────────────────────
+    const ENCOURAGE = ['SIX SEVEN！！', '衝啊啊啊 🔥', '加速！加速！', '快點快點！！', '快衝了！！！'];
+
+    function gameLoop() {
+      requestAnimationFrame(gameLoop);
+      if (!video.videoWidth) return;
+
+      detectPose();
+
+      resizeSkel();
+      skelCtx.clearRect(0, 0, skelLayer.width, skelLayer.height);
+
+      const { left_y, right_y, confidence, landmarks } = poseData;
+      const hasPose = confidence >= 0.3;
+
+      updateConfBadge(confidence);
+
+      if (hasPose && gameState === 'playing') drawSkeleton(landmarks);
+
+      if (gameState === 'idle') {
+        startBtn.disabled    = !hasPose;
+        startBtn.textContent = hasPose ? '🔥 開始挑戰' : '⏳ 站到鏡頭前…';
+      }
+
+      const now = performance.now();
+
+      if (gameState === 'countdown') {
+        const elapsed = (now - cdStart) / 1000;
+        const remain  = Math.ceil(COUNTDOWN_S - elapsed);
+        cdNum.textContent = remain > 0 ? remain : 'GO！';
+        if (elapsed >= COUNTDOWN_S) {
+          gameStart = now;
+          swingCounter.reset();
+          setGameState('playing');
+        }
+      }
+
+      if (gameState === 'playing') {
+        swingCounter.update(left_y, right_y, confidence);
+
+        const cnt      = swingCounter.count;
+        const elapsed  = now - gameStart;
+        const timeLeft = Math.max(0, (GAME_DURATION - elapsed) / 1000);
+        const progress = timeLeft / (GAME_DURATION / 1000);
+
+        document.getElementById('swing-count').textContent   = cnt;
+        document.getElementById('time-left-txt').textContent = timeLeft.toFixed(1) + ' 秒';
+
+        const bar = document.getElementById('time-bar');
+        bar.style.width      = (progress * 100) + '%';
+        bar.style.background = progress > 0.4
+          ? 'linear-gradient(90deg, var(--green), var(--yellow))'
+          : 'linear-gradient(90deg, var(--red), #fb923c)';
+
+        document.getElementById('encourage-txt').textContent =
+          timeLeft < 5 ? ENCOURAGE[Math.random() * ENCOURAGE.length | 0] : 'SIX SEVEN！';
+
+        if (timeLeft <= 0) {
+          lastScore = cnt;
+          document.getElementById('final-score').textContent = cnt;
+          const best = parseInt(document.getElementById('best-score').textContent) || 0;
+          document.getElementById('new-record-badge').style.display =
+            cnt > 0 && cnt >= best ? 'block' : 'none';
+          document.getElementById('name-input').value = '';
+          setGameState('result');
+          loadLeaderboard();
+        }
+      }
+    }
+
+    // ── 鏡頭啟動 + 模型初始化 ─────────────────────────────────────────────
+    window.startCamera = async function () {
+      document.getElementById('perm-initial').style.display = 'none';
+      document.getElementById('perm-loading').style.display = 'flex';
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        video.srcObject = stream;
+        await video.play();
+
+        await initPose();
+
+        document.getElementById('perm-loading').style.display = 'none';
+        document.getElementById('cam-perm').style.display     = 'none';
+        setGameState('idle');
+        loadLeaderboard();
+        requestAnimationFrame(gameLoop);
+
+      } catch (e) {
+        document.getElementById('perm-loading').style.display = 'none';
+        document.getElementById('perm-initial').style.display = 'flex';
+        document.getElementById('perm-initial').querySelector('p').textContent =
+          '❌ ' + e.message + '。請允許鏡頭（需在 HTTPS 網址下使用）。';
+      }
+    };
+
+    window.addEventListener('load', () => startCamera());
+  </script>
+</body>
+</html>
