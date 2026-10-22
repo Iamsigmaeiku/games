@@ -1,0 +1,16 @@
+{
+  // 獨立 Worker：只負責 iamsigmaeiku.com/games，不影響 balancer（根路徑）
+  "name": "games",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public"
+  },
+  "routes": [
+    { "pattern": "iamsigmaeiku.com/games",    "zone_name": "iamsigmaeiku.com" },
+    { "pattern": "iamsigmaeiku.com/games/*",  "zone_name": "iamsigmaeiku.com" },
+    { "pattern": "www.iamsigmaeiku.com/games",   "zone_name": "iamsigmaeiku.com" },
+    { "pattern": "www.iamsigmaeiku.com/games/*", "zone_name": "iamsigmaeiku.com" }
+  ]
+}
